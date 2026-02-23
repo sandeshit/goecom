@@ -1,0 +1,56 @@
+
+x-server: &base_server_setup
+  restart: unless-stopped
+  image: golang-ecom/server
+  build:
+    context: ./
+  stdin_open: true
+  tty: true
+  env_file:
+    - .env
+  environment: &base_server_environments
+      GOOSE_DBSTRING: ${GOOSE_DBSTRING:?err}
+      GOOSE_DRIVER: ${GOOSE_DRIVER:?err}
+      GOOSE_MIGRATION_DIR: ${GOOSE_MIGRATION_DIR:-./internal/adapters/postgresql/migrations}
+  extra_hosts:
+      - "host.docker.internal:host-gateway"
+  depends_on:
+    - db
+
+# These are all definitions for the container, how a container should form.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ecom-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ecom
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck: # This checks the container status with the command given.
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # migrate:
+  #   <<: *base_server_setup # the base server config in migrate too.
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy # extra conditions for the depends on clause
+  #   command: goose up
+  #   restart: "no"
+
+  web:
+    <<: *base_server_setup
+    # depends_on:
+    #   migrate:
+    #     condition: service_completed_successfully # condition for the migrations to complete successfully.
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres-data:
